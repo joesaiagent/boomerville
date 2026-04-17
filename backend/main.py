@@ -56,16 +56,49 @@ NJ_ANNUAL_RATES = {
 }
 
 CURRENT_YEAR = 2026
-FREEHOLD_TWP_ASSESSMENT_RATIO = 0.82  # Monmouth County avg equalization ratio
+MONMOUTH_ASSESSMENT_RATIO = 0.82  # Monmouth County equalization ratio (all three townships)
 
-FREEHOLD_TWP_STREETS = [
-    "Oak Hill Rd", "Wemrock Rd", "Elton Adelphia Rd", "Schanck Rd",
-    "Kozloski Rd", "Stillwells Corner Rd", "Augusta Dr", "Tennent Rd",
-    "Burlington Path Rd", "Tavern Rd", "Randolph Rd", "Park Ave",
-    "Georgia Rd", "Conover Rd", "Jerseyville Ave", "Maplewood Dr",
-    "Ironwood Ct", "Woodfield Rd", "Craig Rd", "Briar Hill Dr",
-    "Dutch Lane Rd", "Beacon Hill Blvd", "Prospect St", "Jackson Mills Rd",
-]
+# Supported municipalities — district codes confirmed from live site (2026-04-16)
+MUNICIPALITIES: dict[str, dict] = {
+    "freehold": {
+        "district": "1317",
+        "name": "Freehold Township",
+        "zip": "07728",
+        "streets": [
+            "Oak Hill Rd", "Wemrock Rd", "Elton Adelphia Rd", "Schanck Rd",
+            "Kozloski Rd", "Stillwells Corner Rd", "Augusta Dr", "Tennent Rd",
+            "Burlington Path Rd", "Tavern Rd", "Randolph Rd", "Park Ave",
+            "Georgia Rd", "Conover Rd", "Jerseyville Ave", "Maplewood Dr",
+            "Ironwood Ct", "Woodfield Rd", "Craig Rd", "Briar Hill Dr",
+            "Dutch Lane Rd", "Beacon Hill Blvd", "Prospect St", "Jackson Mills Rd",
+        ],
+    },
+    "howell": {
+        "district": "1321",
+        "name": "Howell Township",
+        "zip": "07731",
+        "streets": [
+            "Preventorium Rd", "Gravel Hill Rd", "Ramtown Greenville Rd",
+            "Lakewood Farmingdale Rd", "Squankum Yellowbrook Rd", "Lanes Mill Rd",
+            "Lexington Ave", "Aldrich Rd", "Casino Dr", "Yellowbrook Rd",
+            "Oak Glen Rd", "Colts Neck Rd", "Fairfield Rd", "Ramshorn Dr",
+            "Herbertsville Rd", "Georgia Rd", "Conover Rd", "Summerville Rd",
+            "Sycamore Ave", "Maxim Southard Rd",
+        ],
+    },
+    "wall": {
+        "district": "1352",
+        "name": "Wall Township",
+        "zip": "07719",
+        "streets": [
+            "Wall Allenwood Rd", "New Bedford Rd", "Belmar Blvd", "Route 34",
+            "Allaire Rd", "Hospital Rd", "Lakewood Rd", "Baileys Corner Rd",
+            "Atlantic Ave", "Sea Girt Ave", "Patterson Ave", "Ramshorn Dr",
+            "Jumping Brook Rd", "Stony Brook Rd", "Allenwood Rd", "Herbertsville Rd",
+            "Old Mill Rd", "Collingwood Rd", "Essex Rd", "Valley Rd",
+        ],
+    },
+}
 
 
 # ─── Equity math ──────────────────────────────────────────────────────────────
@@ -86,7 +119,7 @@ def estimate_equity(assessed_value: float, year_purchased: int) -> dict:
     Derive current market value and equity from current assessed value.
     NJ assessed values represent a fraction of market value (equalization ratio).
     """
-    estimated_current_value = assessed_value / FREEHOLD_TWP_ASSESSMENT_RATIO
+    estimated_current_value = assessed_value / MONMOUTH_ASSESSMENT_RATIO
     years_owned = CURRENT_YEAR - year_purchased
     factor = appreciation_factor(year_purchased)
 
@@ -160,18 +193,22 @@ def claude_client() -> anthropic.Anthropic:
 #   - Property detail is on m4.cgi, not the list page
 
 MONMOUTH_BASE = "https://tax1.co.monmouth.nj.us/cgi-bin"
-FREEHOLD_TWP_DISTRICT = "1317"
 
 
-async def scrape_monmouth_records(max_purchase_year: int, max_results: int = 30) -> list[dict]:
+async def scrape_monmouth_records(
+    max_purchase_year: int,
+    municipality_key: str = "freehold",
+    max_results: int = 30,
+) -> list[dict]:
     """
     Scrape real Freehold Township NJ property records owned since max_purchase_year.
     Returns empty list on any failure so the caller can use the fallback.
     """
+    mun = MUNICIPALITIES.get(municipality_key, MUNICIPALITIES["freehold"])
     list_payload = {
         "ms_user": "monm",
         "passwd": "data",
-        "district": FREEHOLD_TWP_DISTRICT,
+        "district": mun["district"],
         "srch_type": "1",       # Current Owners / Assessment List
         "adv": "2",             # Advanced search (exposes date filter)
         "out_type": "1",        # Single-line list
@@ -236,7 +273,7 @@ async def scrape_monmouth_records(max_purchase_year: int, max_results: int = 30)
                         r = await client.get(f"{MONMOUTH_BASE}/{link}", timeout=15)
                         if r.status_code != 200:
                             return None
-                        return _parse_m4_detail(r.text, max_purchase_year)
+                        return _parse_m4_detail(r.text, max_purchase_year, mun)
                     except Exception:
                         return None
 
@@ -248,7 +285,7 @@ async def scrape_monmouth_records(max_purchase_year: int, max_results: int = 30)
         return []
 
 
-def _parse_m4_detail(html: str, max_purchase_year: int) -> dict | None:
+def _parse_m4_detail(html: str, max_purchase_year: int, mun: dict | None = None) -> dict | None:
     """
     Parse a single m4.cgi property detail page.
 
@@ -310,12 +347,13 @@ def _parse_m4_detail(html: str, max_purchase_year: int) -> dict | None:
         if not address_street:
             return None
 
-        zip_code = "07728"
+        mun = mun or MUNICIPALITIES["freehold"]
+        zip_code = mun["zip"]
         zip_match = re.search(r"0\d{4}", city_state_raw)
         if zip_match:
             zip_code = zip_match.group()
 
-        address = f"{address_street.title()}, Freehold Township, NJ {zip_code}"
+        address = f"{address_street.title()}, {mun['name']}, NJ {zip_code}"
 
         # ── 2026 assessed value from tax history (Table 2, row 2) ────────────
         assessed_value = 0.0
@@ -380,12 +418,14 @@ def _parse_m4_detail(html: str, max_purchase_year: int) -> dict | None:
 
 # ─── Realistic fallback data ──────────────────────────────────────────────────
 
-def generate_fallback_properties(zip_code: str, min_years_owned: int, count: int = 25) -> list[dict]:
+def generate_fallback_properties(municipality_key: str, min_years_owned: int, count: int = 25) -> list[dict]:
     """
-    Generate deterministic, realistic-looking Freehold Township NJ property data.
+    Generate deterministic, realistic-looking NJ property data for the given municipality.
     Used when live scraping is unavailable.
     """
-    rng = random.Random(42)  # fixed seed → stable across calls
+    mun = MUNICIPALITIES.get(municipality_key, MUNICIPALITIES["freehold"])
+    # Use municipality key as part of seed so each township gets distinct data
+    rng = random.Random(hash(municipality_key) & 0xFFFF)
 
     first_names = [
         "Robert", "Dorothy", "James", "Patricia", "Charles", "Barbara",
@@ -408,8 +448,8 @@ def generate_fallback_properties(zip_code: str, min_years_owned: int, count: int
     for i in range(count):
         year_purchased = rng.randint(1968, max_purchase_year)
         house_num = rng.randint(10, 398)
-        street = rng.choice(FREEHOLD_TWP_STREETS)
-        address = f"{house_num} {street}, Freehold Township, NJ {zip_code}"
+        street = rng.choice(mun["streets"])
+        address = f"{house_num} {street}, {mun['name']}, NJ {mun['zip']}"
         owner_name = f"{rng.choice(first_names)} {rng.choice(last_names)}"
 
         assessed_value = round(rng.uniform(195_000, 420_000), -3)
@@ -429,6 +469,7 @@ def generate_fallback_properties(zip_code: str, min_years_owned: int, count: int
             "lot_size_acres": round(rng.uniform(0.18, 1.85), 2),
             "tags": tags,
             "source": "realistic_fallback",
+            "municipality": mun["name"],
         })
 
     return properties
@@ -454,20 +495,22 @@ async def health():
 # ─── /api/search  (original Claude-simulated endpoint) ───────────────────────
 
 @app.get("/api/search")
-async def search(zip_code: str = "07728", min_years_owned: int = 30):
+async def search(municipality: str = "freehold", min_years_owned: int = 30):
     """Original endpoint: Claude generates simulated property records."""
     client = claude_client()
+    mun = MUNICIPALITIES.get(municipality, MUNICIPALITIES["freehold"])
     max_year = CURRENT_YEAR - min_years_owned
 
-    prompt = f"""Generate 15 realistic property records for long-term homeowners in Freehold Township, NJ (zip: {zip_code}).
+    prompt = f"""Generate 15 realistic property records for long-term homeowners in {mun['name']}, NJ (zip: {mun['zip']}).
 Each owner must have purchased in {max_year} or earlier (owned {min_years_owned}+ years).
-Use real Freehold Township street names. Values must be realistic for Monmouth County NJ.
+Use real {mun['name']} street names. Values must be realistic for Monmouth County NJ.
 
 Return a JSON array of exactly 15 objects. Each object must have these exact keys:
 address, owner_name, year_purchased, years_owned, assessed_value, estimated_current_value,
 estimated_equity, equity_percentage, bedrooms, bathrooms, sq_ft, lot_size_acres, has_mortgage, tags
 
 Rules:
+- address must include "{mun['name']}, NJ {mun['zip']}"
 - assessed_value: $180000–$420000 (NJ assessed, ~82% of market)
 - estimated_current_value: assessed_value / 0.82, then apply historical NJ appreciation
 - equity_percentage >= 70 → include "High Equity" in tags
@@ -495,59 +538,101 @@ Return ONLY the raw JSON array. No markdown, no commentary."""
 
 # ─── /api/real-search  (real data with caching + fallback) ───────────────────
 
-@app.get("/api/real-search")
-async def real_search(zip_code: str = "07728", min_years_owned: int = 30):
-    """
-    Returns real Monmouth County tax records for Freehold Township long-term owners.
-    Falls back to realistic generated data if live scraping is unavailable.
-    Caches results for 24 hours.
-    """
-    cache_path = DATA_DIR / f"cache_{zip_code}_{min_years_owned}.json"
-
-    # Serve cache if fresh (< 24 hours)
-    if cache_path.exists():
-        age_hours = (datetime.now().timestamp() - cache_path.stat().st_mtime) / 3600
-        if age_hours < 24:
-            cached = json.loads(cache_path.read_text())
-            cached["cached"] = True
-            return cached
-
-    source = "realistic_fallback"
-    properties: list[dict] = []
-    scrape_note = ""
-
-    # Attempt 1: live Monmouth County records
-    max_purchase_year = CURRENT_YEAR - min_years_owned
-    try:
-        scraped = await scrape_monmouth_records(max_purchase_year=max_purchase_year)
-        if len(scraped) >= 10:
-            properties = scraped
-            source = "monmouth_county_records"
-        else:
-            scrape_note = f"Scraper returned {len(scraped)} records (need ≥10); using fallback."
-    except Exception as e:
-        scrape_note = f"Scraper error: {e}; using fallback."
-
-    # Fallback: deterministic realistic data
-    if len(properties) < 10:
-        properties = generate_fallback_properties(zip_code, min_years_owned, count=25)
-        source = "realistic_fallback"
-
-    # Filter to min_years_owned
-    properties = [p for p in properties if p.get("year_purchased", 9999) <= max_purchase_year]
-
-    result = {
-        "source": source,
-        "zip_code": zip_code,
-        "min_years_owned": min_years_owned,
-        "count": len(properties),
-        "properties": properties,
-        "cached": False,
-        "notes": scrape_note or None,
+@app.get("/api/municipalities")
+async def get_municipalities():
+    """Return the list of supported municipalities."""
+    return {
+        k: {"name": v["name"], "zip": v["zip"]}
+        for k, v in MUNICIPALITIES.items()
     }
 
-    cache_path.write_text(json.dumps(result, indent=2))
-    return result
+
+@app.get("/api/real-search")
+async def real_search(municipality: str = "freehold", min_years_owned: int = 30):
+    """
+    Returns real Monmouth County tax records for the given municipality.
+    Pass municipality=freehold|howell|wall or municipality=all for all three.
+    Falls back to realistic generated data per township if scraping fails.
+    Caches results per municipality for 24 hours.
+    """
+    keys = list(MUNICIPALITIES.keys()) if municipality == "all" else [municipality]
+    # Validate
+    keys = [k for k in keys if k in MUNICIPALITIES]
+    if not keys:
+        keys = ["freehold"]
+
+    max_purchase_year = CURRENT_YEAR - min_years_owned
+    all_properties: list[dict] = []
+    sources: list[str] = []
+    notes: list[str] = []
+
+    for key in keys:
+        mun = MUNICIPALITIES[key]
+        cache_path = DATA_DIR / f"cache_{key}_{min_years_owned}.json"
+
+        # Serve from cache if fresh
+        if cache_path.exists():
+            age_hours = (datetime.now().timestamp() - cache_path.stat().st_mtime) / 3600
+            if age_hours < 24:
+                cached = json.loads(cache_path.read_text())
+                all_properties.extend(cached.get("properties", []))
+                sources.append(cached.get("source", "cached"))
+                continue
+
+        source = "realistic_fallback"
+        properties: list[dict] = []
+
+        try:
+            scraped = await scrape_monmouth_records(
+                max_purchase_year=max_purchase_year,
+                municipality_key=key,
+            )
+            if len(scraped) >= 10:
+                properties = scraped
+                source = "monmouth_county_records"
+            else:
+                notes.append(f"{mun['name']}: scraper returned {len(scraped)} records; using fallback.")
+        except Exception as e:
+            notes.append(f"{mun['name']}: scraper error ({e}); using fallback.")
+
+        if len(properties) < 10:
+            properties = generate_fallback_properties(key, min_years_owned, count=25)
+            source = "realistic_fallback"
+
+        properties = [p for p in properties if p.get("year_purchased", 9999) <= max_purchase_year]
+
+        mun_result = {
+            "source": source,
+            "municipality": key,
+            "min_years_owned": min_years_owned,
+            "count": len(properties),
+            "properties": properties,
+            "cached": False,
+        }
+        cache_path.write_text(json.dumps(mun_result, indent=2))
+        all_properties.extend(properties)
+        sources.append(source)
+
+    # Deduplicate by address across townships
+    seen: set[str] = set()
+    deduped = []
+    for p in all_properties:
+        addr = p.get("address", "")
+        if addr not in seen:
+            seen.add(addr)
+            deduped.append(p)
+
+    dominant_source = "monmouth_county_records" if "monmouth_county_records" in sources else sources[0] if sources else "realistic_fallback"
+
+    return {
+        "source": dominant_source,
+        "municipalities": keys,
+        "min_years_owned": min_years_owned,
+        "count": len(deduped),
+        "properties": deduped,
+        "cached": False,
+        "notes": "; ".join(notes) if notes else None,
+    }
 
 
 # ─── /api/draft-letter ───────────────────────────────────────────────────────
