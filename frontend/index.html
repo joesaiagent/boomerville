@@ -1125,6 +1125,20 @@ function renderForeclosures(sales) {
   sales.forEach((s, i) => grid.appendChild(buildFcCard(s, i)));
 }
 
+function saleCountdown(saleDateStr) {
+  if (!saleDateStr) return { label: '—', cls: '', days: null };
+  const parts = saleDateStr.split('/');
+  if (parts.length !== 3) return { label: saleDateStr, cls: '', days: null };
+  const saleDate = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+  const today = new Date(); today.setHours(0,0,0,0); saleDate.setHours(0,0,0,0);
+  const days = Math.round((saleDate - today) / 86400000);
+  if (days < 0)  return { label: 'Sale Passed', cls: 'color:var(--muted)', days };
+  if (days === 0) return { label: 'TODAY', cls: 'color:var(--red);font-weight:800', days };
+  if (days <= 7)  return { label: `${days}d left`, cls: 'color:var(--red);font-weight:700', days };
+  if (days <= 30) return { label: `${days}d left`, cls: 'color:var(--gold);font-weight:600', days };
+  return { label: `${days}d left`, cls: 'color:var(--green)', days };
+}
+
 function buildFcCard(s, idx) {
   const div = document.createElement('div');
   const statusKey = (s.status || '').toLowerCase();
@@ -1140,6 +1154,7 @@ function buildFcCard(s, idx) {
   const equityAmt = (s.upset_price && s.approx_judgment) ? s.upset_price - s.approx_judgment : null;
   const equityFmt = equityAmt != null ? '$' + Math.round(equityAmt).toLocaleString() : '—';
   const equityCls = equityAmt != null && equityAmt > 0 ? 'green' : 'red';
+  const cd = saleCountdown(s.sale_date);
 
   div.innerHTML = `
     <div class="fc-card-header">
@@ -1150,9 +1165,18 @@ function buildFcCard(s, idx) {
       <span class="fc-status ${statusCls}">${escHtml(s.status || 'Unknown')}</span>
     </div>
     <div class="fc-upset-block">
-      <div class="fc-upset-label">Upset Price (Min. Bid)</div>
-      <div class="fc-upset-value">${upsetFmt}</div>
-      <div class="fc-upset-sub">Sale Date: <strong>${escHtml(s.sale_date || '—')}</strong>${s.occupancy ? ' &nbsp;·&nbsp; ' + escHtml(s.occupancy) : ''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="fc-upset-label">Upset Price (Min. Bid)</div>
+          <div class="fc-upset-value">${upsetFmt}</div>
+        </div>
+        <div style="text-align:right;padding-top:2px">
+          <div class="fc-upset-label">Sale Date</div>
+          <div style="font-size:15px;font-weight:700;${cd.cls}">${escHtml(cd.label)}</div>
+          <div style="font-size:11px;color:var(--muted)">${escHtml(s.sale_date || '')}</div>
+        </div>
+      </div>
+      <div class="fc-upset-sub" style="margin-top:6px">${s.occupancy ? escHtml(s.occupancy) : ''}</div>
     </div>
     <div class="fc-card-body">
       <div class="fc-row"><span class="lbl">Approx. Judgment</span><span class="val">${judgFmt}</span></div>
