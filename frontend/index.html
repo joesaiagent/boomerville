@@ -350,9 +350,115 @@
     .empty-state .icon { font-size: 48px; display: block; margin-bottom: 16px; }
     .loading-state { text-align: center; padding: 60px 20px; color: var(--muted); }
 
+    /* ── Foreclosure Tab ─────────────────────────────── */
+    .fc-controls {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .fc-controls label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+    .fc-controls select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 14px;
+    }
+    #panel-foreclosure { padding: 0; }
+    .fc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; padding: 20px 28px; }
+
+    /* Status badges */
+    .fc-status {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+    .fc-status-scheduled   { background: rgba(255,107,107,.2); color: var(--red);   border: 1px solid rgba(255,107,107,.4); }
+    .fc-status-adjournment { background: rgba(212,168,67,.2);  color: var(--gold);  border: 1px solid rgba(212,168,67,.4); }
+    .fc-status-bankrupt    { background: rgba(155,89,182,.2);  color: #c39bd3;      border: 1px solid rgba(155,89,182,.4); }
+    .fc-status-canceled    { background: rgba(139,143,168,.15);color: var(--muted); border: 1px solid var(--border); }
+
+    /* Foreclosure card */
+    .fc-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color .2s, transform .15s;
+    }
+    .fc-card:hover { border-color: var(--red); transform: translateY(-2px); }
+    .fc-card.status-scheduled { border-left: 3px solid var(--red); }
+    .fc-card.status-adjournment { border-left: 3px solid var(--gold); }
+    .fc-card.status-bankrupt { border-left: 3px solid #9b59b6; }
+
+    .fc-card-header {
+      background: var(--surface2);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .fc-card-title { flex: 1; }
+    .fc-address { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; }
+    .fc-owner  { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .fc-upset-block {
+      padding: 14px 16px 10px;
+      background: rgba(255,107,107,.04);
+      border-bottom: 1px solid var(--border);
+    }
+    .fc-upset-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .fc-upset-value { font-size: 26px; font-weight: 700; color: var(--red); line-height: 1.2; }
+    .fc-upset-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .fc-card-body { padding: 12px 16px; }
+    .fc-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(46,51,80,.4);
+      font-size: 12px;
+      gap: 8px;
+    }
+    .fc-row:last-of-type { border-bottom: none; }
+    .fc-row .lbl { color: var(--muted); white-space: nowrap; }
+    .fc-row .val { font-weight: 600; text-align: right; word-break: break-word; }
+    .fc-row .val.green { color: var(--green); }
+    .fc-row .val.gold  { color: var(--gold);  }
+    .fc-row .val.red   { color: var(--red);   }
+
+    .fc-card-actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .fc-card-actions .btn { flex: 1; }
+    .btn-bailout { background: var(--red); color: #fff; }
+    .btn-bailout:hover { filter: brightness(1.15); }
+
+    /* Source badge (foreclosure) */
+    #fc-source-badge { margin: 0 28px; margin-top: 12px; }
+
+    /* FC Stats bar */
+    #fc-stats-bar { display: none; }
+
     @media (max-width: 600px) {
       .search-bar { flex-direction: column; align-items: flex-start; }
       header { flex-direction: column; gap: 10px; }
+      .fc-controls { flex-direction: column; align-items: flex-start; }
     }
   </style>
 </head>
@@ -408,6 +514,9 @@
   </div>
   <div class="tab" onclick="switchTab('map')">
     Map View
+  </div>
+  <div class="tab" onclick="switchTab('foreclosure')">
+    Foreclosure <span class="tab-badge" id="fc-count">0</span>
   </div>
   <div class="tab" onclick="switchTab('leads')">
     Saved Leads <span class="tab-badge" id="leads-count">0</span>
@@ -478,6 +587,60 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════ -->
+<!-- FORECLOSURE TAB                                         -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-foreclosure">
+
+  <!-- Controls -->
+  <div class="fc-controls">
+    <label>
+      Township
+      <select id="fc-municipality">
+        <option value="all">All Four Townships</option>
+        <option value="freehold">Freehold Township</option>
+        <option value="howell">Howell Township</option>
+        <option value="wall">Wall Township</option>
+        <option value="millstone">Millstone Township</option>
+      </select>
+    </label>
+    <label>
+      Status
+      <select id="fc-status-filter">
+        <option value="all">All Statuses</option>
+        <option value="Scheduled">Scheduled</option>
+        <option value="Adjournment">Adjournment</option>
+        <option value="Bankrupt">Bankrupt</option>
+      </select>
+    </label>
+    <div style="margin-top:18px">
+      <button class="btn btn-primary" id="fc-search-btn" onclick="loadForeclosures()">Load Sales</button>
+    </div>
+  </div>
+
+  <!-- Source badge -->
+  <div id="fc-source-badge" class="source-badge"></div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar" id="fc-stats-bar">
+    <div class="stat"><span class="stat-label">Active Sales</span><span class="stat-value red" id="fc-stat-count">0</span></div>
+    <div class="stat"><span class="stat-label">Scheduled</span><span class="stat-value red" id="fc-stat-scheduled">—</span></div>
+    <div class="stat"><span class="stat-label">Adjournment</span><span class="stat-value gold" id="fc-stat-adj">—</span></div>
+    <div class="stat"><span class="stat-label">Avg Upset Price</span><span class="stat-value" id="fc-stat-upset">—</span></div>
+    <div class="stat"><span class="stat-label">Avg Potential Equity</span><span class="stat-value green" id="fc-stat-equity">—</span></div>
+  </div>
+
+  <!-- Results -->
+  <div id="fc-loading" class="loading-state" style="display:none">
+    <span class="spinner"></span> Loading Monmouth County sheriff's sales…
+  </div>
+  <div id="fc-empty" class="empty-state">
+    <span class="icon">⚖️</span>
+    <p>Click <strong>Load Sales</strong> to fetch active sheriff's sales from Monmouth County.</p>
+  </div>
+  <div class="fc-grid" id="fc-grid"></div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
 <!-- LEADS TAB                                               -->
 <!-- ════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="panel-leads">
@@ -501,6 +664,21 @@
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="copyLetter()">Copy Letter</button>
       <button class="btn btn-outline" onclick="closeLetter()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- BAIL-OUT LETTER MODAL                                   -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="bailout-modal">
+  <div class="modal">
+    <h2 style="color:var(--red)">Bail-Out Outreach Letter</h2>
+    <div class="modal-meta" id="bailout-meta"></div>
+    <div class="letter-box loading" id="bailout-body">Generating letter with Claude…</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="copyBailout()">Copy Letter</button>
+      <button class="btn btn-outline" onclick="closeBailout()">Close</button>
     </div>
   </div>
 </div>
@@ -552,8 +730,9 @@ function setSource(src) {
 
 // ── Tab switching ─────────────────────────────────────────
 function switchTab(tab) {
+  const tabOrder = ['results','map','foreclosure','leads'];
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['results','map','leads'][i] === tab);
+    t.classList.toggle('active', tabOrder[i] === tab);
   });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   $(`panel-${tab}`).classList.add('active');
@@ -891,6 +1070,189 @@ async function geocode(address) {
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Foreclosure ───────────────────────────────────────────
+let allSales = [];
+let currentBailoutLetter = '';
+
+async function loadForeclosures() {
+  const municipality = $('fc-municipality').value || 'all';
+  const statusFilter = $('fc-status-filter').value || 'all';
+
+  $('fc-search-btn').disabled = true;
+  $('fc-empty').style.display = 'none';
+  $('fc-grid').innerHTML = '';
+  $('fc-loading').style.display = 'block';
+  $('fc-stats-bar').style.display = 'none';
+  $('fc-source-badge').className = 'source-badge';
+
+  try {
+    const r = await fetch(`${API}/api/foreclosures?municipality=${municipality}`);
+    if (!r.ok) throw new Error(`API error ${r.status}`);
+    const data = await r.json();
+
+    allSales = data.sales || [];
+
+    // Apply status filter
+    const filtered = statusFilter === 'all'
+      ? allSales
+      : allSales.filter(s => s.status && s.status.toLowerCase().includes(statusFilter.toLowerCase()));
+
+    renderForeclosures(filtered);
+    renderFcStats(filtered);
+    renderFcSourceBadge(data);
+    $('fc-count').textContent = filtered.length;
+
+  } catch(e) {
+    toast('Failed to load foreclosures: ' + e.message, 'error');
+    $('fc-empty').style.display = 'block';
+    $('fc-empty').innerHTML = `<span class="icon">⚠️</span><p>${e.message}<br><small>Is the server running?</small></p>`;
+  } finally {
+    $('fc-search-btn').disabled = false;
+    $('fc-loading').style.display = 'none';
+  }
+}
+
+function renderForeclosures(sales) {
+  const grid = $('fc-grid');
+  grid.innerHTML = '';
+  if (!sales.length) {
+    $('fc-empty').style.display = 'block';
+    $('fc-empty').innerHTML = '<span class="icon">⚖️</span><p>No sheriff\'s sales match the current filter.</p>';
+    return;
+  }
+  $('fc-empty').style.display = 'none';
+  sales.forEach((s, i) => grid.appendChild(buildFcCard(s, i)));
+}
+
+function buildFcCard(s, idx) {
+  const div = document.createElement('div');
+  const statusKey = (s.status || '').toLowerCase();
+  let statusCls = 'fc-status-canceled';
+  let cardCls = '';
+  if (statusKey.includes('scheduled'))   { statusCls = 'fc-status-scheduled';   cardCls = 'status-scheduled'; }
+  if (statusKey.includes('adjournment')) { statusCls = 'fc-status-adjournment'; cardCls = 'status-adjournment'; }
+  if (statusKey.includes('bankrupt'))    { statusCls = 'fc-status-bankrupt';    cardCls = 'status-bankrupt'; }
+  div.className = `fc-card ${cardCls}`;
+
+  const upsetFmt  = s.upset_price  ? '$' + Math.round(s.upset_price).toLocaleString()  : '—';
+  const judgFmt   = s.approx_judgment ? '$' + Math.round(s.approx_judgment).toLocaleString() : '—';
+  const equityAmt = (s.upset_price && s.approx_judgment) ? s.upset_price - s.approx_judgment : null;
+  const equityFmt = equityAmt != null ? '$' + Math.round(equityAmt).toLocaleString() : '—';
+  const equityCls = equityAmt != null && equityAmt > 0 ? 'green' : 'red';
+
+  div.innerHTML = `
+    <div class="fc-card-header">
+      <div class="fc-card-title">
+        <div class="fc-address">${escHtml(s.address)}</div>
+        <div class="fc-owner">👤 ${escHtml(s.owner_name)}</div>
+      </div>
+      <span class="fc-status ${statusCls}">${escHtml(s.status || 'Unknown')}</span>
+    </div>
+    <div class="fc-upset-block">
+      <div class="fc-upset-label">Upset Price (Min. Bid)</div>
+      <div class="fc-upset-value">${upsetFmt}</div>
+      <div class="fc-upset-sub">Sale Date: <strong>${escHtml(s.sale_date || '—')}</strong>${s.occupancy ? ' &nbsp;·&nbsp; ' + escHtml(s.occupancy) : ''}</div>
+    </div>
+    <div class="fc-card-body">
+      <div class="fc-row"><span class="lbl">Approx. Judgment</span><span class="val">${judgFmt}</span></div>
+      <div class="fc-row"><span class="lbl">Potential Equity</span><span class="val ${equityCls}">${equityFmt}</span></div>
+      <div class="fc-row"><span class="lbl">Plaintiff (Lender)</span><span class="val" style="font-size:11px">${escHtml(s.plaintiff || '—')}</span></div>
+      <div class="fc-row"><span class="lbl">Attorney</span><span class="val" style="font-size:11px">${escHtml(s.attorney || '—')}</span></div>
+      <div class="fc-row"><span class="lbl">Sheriff #</span><span class="val">${escHtml(s.sheriff_num || '—')}</span></div>
+      ${s.court_case ? `<div class="fc-row"><span class="lbl">Court Case</span><span class="val">${escHtml(s.court_case)}</span></div>` : ''}
+      ${s.parcel ? `<div class="fc-row"><span class="lbl">Parcel</span><span class="val" style="font-size:11px">${escHtml(s.parcel)}</span></div>` : ''}
+    </div>
+    <div class="fc-card-actions">
+      <button class="btn btn-bailout btn-small" onclick='draftBailout(${idx})'>✉ Bail Out Letter</button>
+      <button class="btn btn-outline btn-small" onclick='saveFcLead(${idx})'>Save Lead</button>
+    </div>`;
+  return div;
+}
+
+function renderFcStats(sales) {
+  if (!sales.length) return;
+  const scheduled = sales.filter(s => (s.status||'').toLowerCase().includes('scheduled')).length;
+  const adj = sales.filter(s => (s.status||'').toLowerCase().includes('adjournment')).length;
+  const withUpset = sales.filter(s => s.upset_price);
+  const avgUpset = withUpset.length ? withUpset.reduce((a, s) => a + s.upset_price, 0) / withUpset.length : 0;
+  const withEquity = sales.filter(s => s.upset_price && s.approx_judgment);
+  const avgEquity = withEquity.length ? withEquity.reduce((a, s) => a + (s.upset_price - s.approx_judgment), 0) / withEquity.length : 0;
+
+  $('fc-stat-count').textContent = sales.length;
+  $('fc-stat-scheduled').textContent = scheduled;
+  $('fc-stat-adj').textContent = adj;
+  $('fc-stat-upset').textContent = avgUpset ? '$' + Math.round(avgUpset).toLocaleString() : '—';
+  $('fc-stat-equity').textContent = avgEquity ? '$' + Math.round(avgEquity).toLocaleString() : '—';
+  $('fc-stats-bar').style.display = 'flex';
+}
+
+function renderFcSourceBadge(data) {
+  const el = $('fc-source-badge');
+  const src = data.source || '';
+  let cls, icon, text;
+  if (src === 'monmouth_sheriff') {
+    cls = 'real'; icon = '✅';
+    text = `Live Monmouth County Sheriff's Office data — ${data.count} active sale(s)`;
+  } else {
+    cls = 'fallback'; icon = '📊';
+    text = `Realistic fallback data (scraper unavailable) — ${data.count} record(s)`;
+    if (data.notes) text += '. ' + data.notes;
+  }
+  el.className = `source-badge show ${cls}`;
+  el.innerHTML = `<span>${icon}</span><span>${text}</span>`;
+}
+
+async function saveFcLead(idx) {
+  const sale = allSales[idx];
+  if (!sale) return;
+  try {
+    const r = await fetch(`${API}/api/save-lead`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({property: sale}),
+    });
+    const data = await r.json();
+    toast(data.status === 'already_saved' ? 'Already saved' : `Lead saved! Total: ${data.total_leads}`, data.status === 'already_saved' ? 'info' : 'success');
+    $('leads-count').textContent = data.total_leads;
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+async function draftBailout(idx) {
+  const sale = allSales[idx];
+  if (!sale) return;
+  $('bailout-meta').textContent = `${sale.owner_name} · ${sale.address}`;
+  $('bailout-body').textContent = 'Generating letter with Claude…';
+  $('bailout-body').className = 'letter-box loading';
+  $('bailout-modal').classList.add('open');
+
+  try {
+    const r = await fetch(`${API}/api/draft-bailout`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({sale}),
+    });
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    const data = await r.json();
+    currentBailoutLetter = data.letter;
+    $('bailout-body').textContent = currentBailoutLetter;
+    $('bailout-body').className = 'letter-box';
+  } catch(e) {
+    $('bailout-body').textContent = 'Failed: ' + e.message;
+    $('bailout-body').className = 'letter-box';
+    toast('Letter generation failed', 'error');
+  }
+}
+
+function closeBailout() { $('bailout-modal').classList.remove('open'); }
+async function copyBailout() {
+  if (!currentBailoutLetter) return;
+  await navigator.clipboard.writeText(currentBailoutLetter);
+  toast('Letter copied!', 'success');
+}
+$('bailout-modal').addEventListener('click', e => { if (e.target === $('bailout-modal')) closeBailout(); });
 
 // ── Init ──────────────────────────────────────────────────
 checkApi();
