@@ -737,6 +737,12 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   $(`panel-${tab}`).classList.add('active');
 
+  // Hide the homeowner search bar on tabs that don't use it
+  const fcTabs = ['foreclosure', 'leads'];
+  document.querySelector('.search-bar').style.display = fcTabs.includes(tab) ? 'none' : 'flex';
+  document.querySelector('.stats-bar').style.display  = fcTabs.includes(tab) ? 'none' : (allProperties.length ? 'flex' : 'none');
+  document.getElementById('source-badge').style.display = fcTabs.includes(tab) ? 'none' : '';
+
   if (tab === 'map' && allProperties.length > 0) initMap();
   if (tab === 'leads') loadLeads();
 }
