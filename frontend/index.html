@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Boomerville — Monmouth County NJ</title>
+  <title>Boomerville | Monmouth County, NJ</title>
 
   <!-- Leaflet (free OSM map, no API key needed) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -444,7 +444,7 @@
 <div class="tab-panel active" id="panel-results">
   <div class="empty-state" id="empty-state">
     <span class="icon">🔍</span>
-    Select a data source and click <strong>Search</strong> to find long-term homeowners in Freehold Township.
+    Select a township and click <strong>Search</strong> to find long-term homeowners across Monmouth County.
   </div>
   <div class="loading-state" id="loading-state" style="display:none">
     <span class="spinner"></span> Loading property data…
@@ -827,7 +827,7 @@ async function initMap() {
   $('map-container').style.display = 'block';
 
   if (!leafletMap) {
-    leafletMap = L.map('map').setView([40.2171, -74.2741], 13); // Freehold Township center
+    leafletMap = L.map('map').setView([40.20, -74.22], 11); // Monmouth County center
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,

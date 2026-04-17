@@ -1,6 +1,7 @@
 """
 Boomerville API — FastAPI backend
-Targets long-term homeowners in Freehold Township, NJ (07728)
+Targets long-term homeowners across Monmouth County, NJ
+(Freehold, Howell, Wall, and Millstone Townships)
 """
 from __future__ import annotations
 
@@ -675,7 +676,7 @@ Homeowner details:
 - Years at this home: ~{years_owned} years (since ~{year_purchased})
 - Property tags: {', '.join(tags) if tags else 'Long-term owner'}
 
-About Boomerville: A small, local group based in Freehold Township, NJ that connects with long-time homeowners
+About Boomerville: A small, local group based in Monmouth County, NJ that connects with long-time homeowners
 who may be open to exploring their options — direct sale, learning what their home is worth, or simply a conversation.
 
 Letter requirements:
@@ -686,7 +687,7 @@ Letter requirements:
 - Make zero-obligation crystal clear — no pressure whatsoever
 - Offer a free, no-strings conversation or home value chat
 - Under 200 words total
-- Sign off: "Warmly, The Boomerville Team — Freehold Township, NJ"
+- Sign off: "Warmly, The Boomerville Team — Monmouth County, NJ"
 - Do NOT mention specific dollar amounts, equity percentages, or assessed values
 
 Return only the letter text. No subject line, no commentary."""
