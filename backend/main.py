@@ -98,6 +98,19 @@ MUNICIPALITIES: dict[str, dict] = {
             "Old Mill Rd", "Collingwood Rd", "Essex Rd", "Valley Rd",
         ],
     },
+    "millstone": {
+        "district": "1333",
+        "name": "Millstone Township",
+        "zip": "08535",
+        "streets": [
+            "Perrineville Rd", "Herbert Rd", "Agress Rd", "Burlington Path Rd",
+            "Clarksburg Rd", "Walnford Rd", "Yellow Meeting House Rd", "Stagecoach Rd",
+            "Fresh Ponds Rd", "Sweetmans Lane", "Bunting Bridge Rd", "Millstone Rd",
+            "Ellisdale Rd", "Arneytown Hornerstown Rd", "Assunpink Rd",
+            "Thompson Bridge Rd", "Ely Harmony Rd", "Emley Rd", "Rues Ln",
+            "Borden Rd",
+        ],
+    },
 }
 
 
