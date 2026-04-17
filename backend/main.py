@@ -4,6 +4,7 @@ Targets long-term homeowners in Freehold Township, NJ (07728)
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -145,81 +146,219 @@ def claude_client() -> anthropic.Anthropic:
 
 
 # ─── Monmouth County scraper ──────────────────────────────────────────────────
+#
+# Flow:
+#   1. POST to inf.cgi with advanced date filter (sale_to ≤ max_purchase_year)
+#      → returns up to 1000 properties that last sold before that year
+#   2. Extract m4.cgi detail-page links from the results list
+#   3. Fetch detail pages concurrently (semaphore-limited) and parse each one
+#
+# Verified correct parameters via live inspection of the site (2026-04-16):
+#   - District 1317 = Freehold Township (not 0913 which is Hudson County)
+#   - Form posts to inf.cgi, not prc6.cgi
+#   - Advanced search (adv=2) exposes sale_from / sale_to date filters
+#   - Property detail is on m4.cgi, not the list page
+
+MONMOUTH_BASE = "https://tax1.co.monmouth.nj.us/cgi-bin"
+FREEHOLD_TWP_DISTRICT = "1317"
+
 
 async def scrape_monmouth_records(max_purchase_year: int, max_results: int = 30) -> list[dict]:
     """
-    Attempt to scrape public tax records from Monmouth County's PRC system.
-    https://tax1.co.monmouth.nj.us/cgi-bin/prc6.cgi
-    Returns empty list on failure — caller will use fallback.
+    Scrape real Freehold Township NJ property records owned since max_purchase_year.
+    Returns empty list on any failure so the caller can use the fallback.
     """
-    base_url = "https://tax1.co.monmouth.nj.us/cgi-bin/prc6.cgi"
-    # Freehold Township district = 0913 in Monmouth County
-    query_params = {
+    list_payload = {
         "ms_user": "monm",
         "passwd": "data",
-        "district": "0913",
-        "adv": "0",
-        "out": "web",
+        "district": FREEHOLD_TWP_DISTRICT,
+        "srch_type": "1",       # Current Owners / Assessment List
+        "adv": "2",             # Advanced search (exposes date filter)
+        "out_type": "1",        # Single-line list
+        "ms_ln": "1000",        # Max results per page
+        "p_loc": "",
+        "owner": "",
+        "block": "",
+        "lot": "",
+        "qual": "",
+        "street": "",
+        "city": "",
+        "class": "2",           # Residential only
+        "sale_from": "1800-01-01",
+        "sale_to": f"{max_purchase_year}-12-31",
+        "sr1a_f": "0",
+        "cl_type": "0",
+        "zone": "",
+        "book": "",
+        "page": "",
+        "built_f": "0",
+        "built_t": "0",
+        "sqft_f": "0",
+        "sqft_t": "0",
+        "land_f": "0",
+        "land_t": "0",
+        "impr_f": "0",
+        "impr_t": "0",
+        "net_f": "0",
+        "net_t": "0",
+        "sale_f": "0",
+        "sale_t": "0",
     }
 
-    properties: list[dict] = []
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.get(base_url, params=query_params)
-            if resp.status_code != 200 or len(resp.text) < 200:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            # Step 1: get the list of matching properties
+            resp = await client.post(f"{MONMOUTH_BASE}/inf.cgi", data=list_payload)
+            if resp.status_code != 200 or len(resp.text) < 500:
                 return []
 
             soup = BeautifulSoup(resp.text, "lxml")
-            rows = soup.select("table tr")[1:]  # skip header row
+            detail_links = [
+                a["href"] for a in soup.find_all("a")
+                if a.get("href", "").startswith("m4.cgi")
+            ]
+            if not detail_links:
+                return []
 
-            for row in rows:
-                cols = [td.get_text(strip=True) for td in row.find_all("td")]
-                if len(cols) < 5:
-                    continue
-                prop = _parse_prc_row(cols, max_purchase_year)
-                if prop:
-                    properties.append(prop)
-                if len(properties) >= max_results:
-                    break
+            # Shuffle so we get geographic diversity, not just Block 1
+            rng = random.Random(42)
+            rng.shuffle(detail_links)
+            # Fetch 2× what we need in case some pages are unparseable
+            sample = detail_links[:min(max_results * 2, 80)]
+
+            # Step 2: fetch detail pages concurrently, max 5 at a time
+            sem = asyncio.Semaphore(5)
+
+            async def fetch_one(link: str) -> dict | None:
+                async with sem:
+                    await asyncio.sleep(0.15)   # be polite to the county server
+                    try:
+                        r = await client.get(f"{MONMOUTH_BASE}/{link}", timeout=15)
+                        if r.status_code != 200:
+                            return None
+                        return _parse_m4_detail(r.text, max_purchase_year)
+                    except Exception:
+                        return None
+
+            results = await asyncio.gather(*[fetch_one(lnk) for lnk in sample])
+            properties = [p for p in results if p is not None]
+            return properties[:max_results]
+
     except Exception:
         return []
 
-    return properties
 
-
-def _parse_prc_row(cols: list[str], max_purchase_year: int) -> dict | None:
+def _parse_m4_detail(html: str, max_purchase_year: int) -> dict | None:
     """
-    Best-effort parse of a PRC6 table row.
-    Columns vary by county config; we handle the most common layout.
+    Parse a single m4.cgi property detail page.
+
+    Page structure (verified 2026-04-16):
+      Table 0 — main property fields
+        Row 0:  Block: | val | Prop Loc: | val | Owner: | val | Square Ft: | val
+        Row 1:  Lot:   | val | District: | val | Street:| val | Year Built:| val
+        Row 2:  Qual:  | val | Class:    | val | City St| val | Style:     | val
+        Row 8:  Zone:  | val | Map Page: | val | Acreage| val | Taxes:     | val
+        Row 10: Sale Date: | MM/DD/YY | Book: | val | Price: | val | ...
+      Table 1 — Sr1a (deed history list)
+      Table 2 — Tax-List-History
+        Row 0:  "TAX-LIST-HISTORY"
+        Row 1:  column headers
+        Row 2:  2026 | location | land | exemption | total_assessed | class
     """
     try:
-        # Typical PRC6 layout: Block | Lot | Location | Owner | Class | Land | Improve | Total | Deed Date
-        address_raw = cols[2] if len(cols) > 2 else ""
-        owner_raw = cols[3] if len(cols) > 3 else ""
-        total_str = cols[7] if len(cols) > 7 else "0"
-        deed_str = cols[8] if len(cols) > 8 else ""
-
-        if not address_raw or not owner_raw:
+        soup = BeautifulSoup(html, "lxml")
+        tables = soup.find_all("table")
+        if len(tables) < 3:
             return None
 
-        # Parse deed year
-        year_match = re.search(r"\b(19\d{2}|20[01]\d)\b", deed_str)
-        if not year_match:
+        def cell(t: int, r: int, c: int) -> str:
+            rows = tables[t].find_all("tr")
+            if r >= len(rows):
+                return ""
+            cells = rows[r].find_all("td")
+            if c >= len(cells):
+                return ""
+            return cells[c].get_text(strip=True).replace("\xa0", " ").strip()
+
+        # ── Main fields ──────────────────────────────────────────────────────
+        address_street  = cell(0, 0, 3)
+        owner_raw       = cell(0, 0, 5)
+        sq_ft_raw       = cell(0, 0, 7)
+        year_built_raw  = cell(0, 1, 7)
+        city_state_raw  = cell(0, 2, 5)
+        acreage_raw     = cell(0, 8, 3)
+        sale_date_raw   = cell(0, 10, 1)
+
+        # ── Sale date → year purchased ───────────────────────────────────────
+        if not sale_date_raw or sale_date_raw == "00/00/00" or "/" not in sale_date_raw:
             return None
-        year_purchased = int(year_match.group(1))
+        parts = sale_date_raw.split("/")
+        if len(parts) != 3:
+            return None
+        yy = int(parts[2])
+        # 2-digit year: >25 → 1900s, ≤25 → 2000s  (avoids the Y2K split at 2025)
+        year_purchased = (1900 + yy) if yy > 25 else (2000 + yy)
         if year_purchased > max_purchase_year:
             return None
 
-        # Parse assessed value
-        assessed_value = float(re.sub(r"[^\d.]", "", total_str) or "0")
+        # ── Owner / address sanity checks ─────────────────────────────────────
+        owner_name = re.sub(r"\s*&nbsp.*", "", owner_raw, flags=re.I).strip()
+        owner_name = re.sub(r"\s+", " ", owner_name).title()
+        if not owner_name or owner_name.lower() in ("unknown", ""):
+            return None
+
+        if not address_street:
+            return None
+
+        zip_code = "07728"
+        zip_match = re.search(r"0\d{4}", city_state_raw)
+        if zip_match:
+            zip_code = zip_match.group()
+
+        address = f"{address_street.title()}, Freehold Township, NJ {zip_code}"
+
+        # ── 2026 assessed value from tax history (Table 2, row 2) ────────────
+        assessed_value = 0.0
+        t2_rows = tables[2].find_all("tr")
+        for row in t2_rows[2:10]:
+            cols = [td.get_text(strip=True).replace(",", "").replace("\xa0", "") for td in row.find_all("td")]
+            if cols and cols[0] in ("2026", "2025") and len(cols) >= 5:
+                try:
+                    v = float(cols[4])
+                    if v > 0:
+                        assessed_value = v
+                        break
+                except ValueError:
+                    pass
         if assessed_value < 10_000:
             return None
 
+        # ── Numeric fields ────────────────────────────────────────────────────
+        try:
+            sq_ft = int(sq_ft_raw)
+        except (ValueError, TypeError):
+            sq_ft = 0
+
+        try:
+            lot_size_acres = round(float(acreage_raw), 4)
+        except (ValueError, TypeError):
+            lot_size_acres = 0.0
+
+        # Estimate bedrooms from sq_ft (NJ tax records don't include bed count)
+        if sq_ft < 1200:
+            bedrooms, bathrooms = 2, 1.0
+        elif sq_ft < 1600:
+            bedrooms, bathrooms = 3, 1.5
+        elif sq_ft < 2200:
+            bedrooms, bathrooms = 3, 2.0
+        elif sq_ft < 3000:
+            bedrooms, bathrooms = 4, 2.5
+        else:
+            bedrooms, bathrooms = 5, 3.0
+
+        # ── Equity + tags ─────────────────────────────────────────────────────
         equity_data = estimate_equity(assessed_value, year_purchased)
         tags = build_tags(year_purchased, equity_data["equity_percentage"])
-
-        address = f"{address_raw.title()}, Freehold Township, NJ 07728"
-        owner_name = owner_raw.title()
 
         return {
             "address": address,
@@ -228,10 +367,10 @@ def _parse_prc_row(cols: list[str], max_purchase_year: int) -> dict | None:
             "years_owned": CURRENT_YEAR - year_purchased,
             "assessed_value": assessed_value,
             **equity_data,
-            "bedrooms": 3,
-            "bathrooms": 2.0,
-            "sq_ft": 1800,
-            "lot_size_acres": 0.5,
+            "bedrooms": bedrooms,
+            "bathrooms": bathrooms,
+            "sq_ft": sq_ft,
+            "lot_size_acres": lot_size_acres,
             "tags": tags,
             "source": "monmouth_county_records",
         }
