@@ -361,6 +361,11 @@ def _parse_m4_detail(html: str, max_purchase_year: int, mun: dict | None = None)
         if not address_street:
             return None
 
+        # Reject condo/unit addresses (NJ format: "14-8 Stuart Dr", "502-1 Harding Rd")
+        # These are building-unit designations, not standalone houses
+        if re.match(r"^\d+-\d+\b", address_street.strip()):
+            return None
+
         mun = mun or MUNICIPALITIES["freehold"]
         zip_code = mun["zip"]
         zip_match = re.search(r"0\d{4}", city_state_raw)
