@@ -455,6 +455,114 @@
     /* FC Stats bar */
     #fc-stats-bar { display: none; }
 
+    /* ── Senior Tab ──────────────────────────────────── */
+    #panel-senior { padding: 0; }
+    .sr-controls {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .sr-controls label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+    .sr-controls select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 14px;
+    }
+    .sr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; padding: 20px 28px; }
+    #sr-stats-bar { display: none; }
+
+    .sr-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--gold);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color .2s, transform .15s;
+    }
+    .sr-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+    .sr-card.high-priority { border-left-color: var(--green); }
+
+    .sr-card-header {
+      background: var(--surface2);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .sr-tier {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .sr-tier-high     { background: rgba(80,200,120,.2);  color: var(--green); border: 1px solid rgba(80,200,120,.4); }
+    .sr-tier-strong   { background: rgba(212,168,67,.2);  color: var(--gold);  border: 1px solid rgba(212,168,67,.4); }
+    .sr-tier-possible { background: rgba(139,143,168,.15);color: var(--muted); border: 1px solid var(--border); }
+
+    .sr-age-block {
+      padding: 14px 16px 10px;
+      background: rgba(212,168,67,.04);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sr-age-main { }
+    .sr-age-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .sr-age-value { font-size: 26px; font-weight: 700; color: var(--gold); line-height: 1.2; }
+    .sr-age-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .sr-owned-block { text-align: right; }
+    .sr-owned-num { font-size: 22px; font-weight: 700; color: var(--text); }
+    .sr-owned-label { font-size: 11px; color: var(--muted); }
+
+    .sr-card-body { padding: 12px 16px; }
+    .sr-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(46,51,80,.4);
+      font-size: 12px;
+      gap: 8px;
+    }
+    .sr-row:last-of-type { border-bottom: none; }
+    .sr-row .lbl { color: var(--muted); white-space: nowrap; }
+    .sr-row .val { font-weight: 600; text-align: right; word-break: break-word; }
+    .sr-row .val.green { color: var(--green); }
+    .sr-row .val.gold  { color: var(--gold);  }
+
+    .sr-disclaimer {
+      font-size: 10px;
+      color: var(--muted);
+      padding: 6px 16px 8px;
+      border-top: 1px solid var(--border);
+      font-style: italic;
+    }
+    .sr-card-actions {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .sr-card-actions .btn { flex: 1; }
+    .btn-senior { background: var(--gold); color: #1a1d30; }
+    .btn-senior:hover { filter: brightness(1.1); }
+
+    #sr-source-badge { margin: 0 28px; margin-top: 12px; }
+
     @media (max-width: 600px) {
       .search-bar { flex-direction: column; align-items: flex-start; }
       header { flex-direction: column; gap: 10px; }
@@ -514,6 +622,9 @@
   </div>
   <div class="tab" onclick="switchTab('map')">
     Map View
+  </div>
+  <div class="tab" onclick="switchTab('senior')">
+    Senior Owners <span class="tab-badge" id="sr-count">0</span>
   </div>
   <div class="tab" onclick="switchTab('foreclosure')">
     Foreclosure <span class="tab-badge" id="fc-count">0</span>
@@ -584,6 +695,58 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SENIOR OWNERS TAB                                        -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="panel-senior">
+
+  <div class="sr-controls">
+    <label>
+      Township
+      <select id="sr-municipality">
+        <option value="all">All Four Townships</option>
+        <option value="freehold">Freehold Township</option>
+        <option value="howell">Howell Township</option>
+        <option value="wall">Wall Township</option>
+        <option value="millstone">Millstone Township</option>
+      </select>
+    </label>
+    <label>
+      Min. Years Owned
+      <select id="sr-min-years">
+        <option value="30">30+ years (est. age 58–75)</option>
+        <option value="35">35+ years (est. age 63–80)</option>
+        <option value="40" selected>40+ years (est. age 68–85) ★ Recommended</option>
+        <option value="45">45+ years (est. age 73–90)</option>
+        <option value="50">50+ years (est. age 78–95)</option>
+      </select>
+    </label>
+    <div style="margin-top:18px">
+      <button class="btn btn-primary" id="sr-search-btn" onclick="loadSeniors()">Search Seniors</button>
+    </div>
+  </div>
+
+  <div id="sr-source-badge" class="source-badge"></div>
+
+  <div class="stats-bar" id="sr-stats-bar">
+    <div class="stat"><span class="stat-label">Seniors Found</span><span class="stat-value gold" id="sr-stat-count">0</span></div>
+    <div class="stat"><span class="stat-label">High Priority (50yr+)</span><span class="stat-value green" id="sr-stat-high">—</span></div>
+    <div class="stat"><span class="stat-label">Avg Years Owned</span><span class="stat-value gold" id="sr-stat-years">—</span></div>
+    <div class="stat"><span class="stat-label">Avg Est. Home Value</span><span class="stat-value" id="sr-stat-value">—</span></div>
+    <div class="stat"><span class="stat-label">Free &amp; Clear</span><span class="stat-value green" id="sr-stat-fc">—</span></div>
+  </div>
+
+  <div id="sr-loading" class="loading-state" style="display:none">
+    <span class="spinner"></span> Searching Monmouth County records for senior-owned homes…
+  </div>
+  <div id="sr-empty" class="empty-state">
+    <span class="icon">🏡</span>
+    <p>Click <strong>Search Seniors</strong> to find long-term homeowners likely aged 70–85+.<br>
+    <small style="color:var(--muted)">Age is estimated from deed records — actual age requires skip tracing.</small></p>
+  </div>
+  <div class="sr-grid" id="sr-grid"></div>
 </div>
 
 <!-- ════════════════════════════════════════════════════════ -->
@@ -683,6 +846,21 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- SENIOR LETTER MODAL                                      -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="senior-modal">
+  <div class="modal">
+    <h2 style="color:var(--gold)">Senior Homeowner Outreach Letter</h2>
+    <div class="modal-meta" id="senior-meta"></div>
+    <div class="letter-box loading" id="senior-body">Generating letter with Claude…</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="copySeniorLetter()">Copy Letter</button>
+      <button class="btn btn-outline" onclick="closeSeniorModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast notification -->
 <div id="toast"></div>
 
@@ -730,7 +908,7 @@ function setSource(src) {
 
 // ── Tab switching ─────────────────────────────────────────
 function switchTab(tab) {
-  const tabOrder = ['results','map','foreclosure','leads'];
+  const tabOrder = ['results','map','senior','foreclosure','leads'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabOrder[i] === tab);
   });
@@ -738,7 +916,7 @@ function switchTab(tab) {
   $(`panel-${tab}`).classList.add('active');
 
   // Hide the homeowner search bar on tabs that don't use it
-  const fcTabs = ['foreclosure', 'leads'];
+  const fcTabs = ['senior', 'foreclosure', 'leads'];
   document.querySelector('.search-bar').style.display = fcTabs.includes(tab) ? 'none' : 'flex';
   document.querySelector('.stats-bar').style.display  = fcTabs.includes(tab) ? 'none' : (allProperties.length ? 'flex' : 'none');
   document.getElementById('source-badge').style.display = fcTabs.includes(tab) ? 'none' : '';
@@ -1076,6 +1254,191 @@ async function geocode(address) {
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Senior Owners ─────────────────────────────────────────
+let allSeniors = [];
+let currentSeniorLetter = '';
+
+async function loadSeniors() {
+  const municipality = $('sr-municipality').value || 'all';
+  const minYears = $('sr-min-years').value || '40';
+
+  $('sr-search-btn').disabled = true;
+  $('sr-empty').style.display = 'none';
+  $('sr-grid').innerHTML = '';
+  $('sr-loading').style.display = 'block';
+  $('sr-stats-bar').style.display = 'none';
+  $('sr-source-badge').className = 'source-badge';
+
+  try {
+    const r = await fetch(`${API}/api/seniors?municipality=${municipality}&min_years_owned=${minYears}`);
+    if (!r.ok) throw new Error(`API error ${r.status}`);
+    const data = await r.json();
+
+    allSeniors = data.properties || [];
+    renderSeniors(allSeniors);
+    renderSrStats(allSeniors);
+    renderSrSourceBadge(data);
+    $('sr-count').textContent = allSeniors.length;
+
+  } catch(e) {
+    toast('Failed to load senior records: ' + e.message, 'error');
+    $('sr-empty').style.display = 'block';
+    $('sr-empty').innerHTML = `<span class="icon">⚠️</span><p>${e.message}</p>`;
+  } finally {
+    $('sr-search-btn').disabled = false;
+    $('sr-loading').style.display = 'none';
+  }
+}
+
+function renderSeniors(props) {
+  const grid = $('sr-grid');
+  grid.innerHTML = '';
+  if (!props.length) {
+    $('sr-empty').style.display = 'block';
+    $('sr-empty').innerHTML = '<span class="icon">🏡</span><p>No senior-profile homeowners found for this filter.</p>';
+    return;
+  }
+  $('sr-empty').style.display = 'none';
+  props.forEach((p, i) => grid.appendChild(buildSrCard(p, i)));
+}
+
+function buildSrCard(p, idx) {
+  const div = document.createElement('div');
+  const tier = p.senior_tier || '';
+  let tierCls = 'sr-tier-possible';
+  let cardCls = '';
+  if (tier === 'High Priority')  { tierCls = 'sr-tier-high';   cardCls = 'high-priority'; }
+  if (tier === 'Strong Match')   { tierCls = 'sr-tier-strong'; }
+
+  const ageLow  = p.est_age_low  || '—';
+  const ageHigh = p.est_age_high || '—';
+  const val   = p.estimated_current_value ? '$' + Math.round(p.estimated_current_value).toLocaleString() : '—';
+  const eq    = p.estimated_equity ? '$' + Math.round(p.estimated_equity).toLocaleString() : '—';
+  const eqPct = p.equity_percentage ? p.equity_percentage.toFixed(0) + '%' : '—';
+  const tags  = (p.tags || []).filter(t => t !== 'Senior Profile').join(' · ') || '—';
+  const fc    = p.has_mortgage === false ? '<span style="color:var(--green)">Free &amp; Clear</span>' : 'Has Mortgage';
+
+  div.className = `sr-card ${cardCls}`;
+  div.innerHTML = `
+    <div class="sr-card-header">
+      <div style="flex:1">
+        <div class="fc-address">${escHtml(p.address)}</div>
+        <div class="fc-owner">👤 ${escHtml(p.owner_name)}</div>
+      </div>
+      <span class="sr-tier ${tierCls}">${escHtml(tier)}</span>
+    </div>
+    <div class="sr-age-block">
+      <div class="sr-age-main">
+        <div class="sr-age-label">Est. Owner Age</div>
+        <div class="sr-age-value">${ageLow}–${ageHigh}</div>
+        <div class="sr-age-sub">Based on deed records</div>
+      </div>
+      <div class="sr-owned-block">
+        <div class="sr-owned-num">${escHtml(String(p.years_owned || '—'))} yrs</div>
+        <div class="sr-owned-label">Years Owned</div>
+        <div class="sr-age-sub">Since ~${p.year_purchased || '—'}</div>
+      </div>
+    </div>
+    <div class="sr-card-body">
+      <div class="sr-row"><span class="lbl">Est. Home Value</span><span class="val">${val}</span></div>
+      <div class="sr-row"><span class="lbl">Estimated Equity</span><span class="val green">${eq} (${eqPct})</span></div>
+      <div class="sr-row"><span class="lbl">Mortgage Status</span><span class="val">${fc}</span></div>
+      <div class="sr-row"><span class="lbl">Property Tags</span><span class="val gold" style="font-size:11px">${tags}</span></div>
+      <div class="sr-row"><span class="lbl">Bedrooms / Baths</span><span class="val">${p.bedrooms || '—'} bd / ${p.bathrooms || '—'} ba</span></div>
+    </div>
+    <div class="sr-disclaimer">
+      ⚠ Age is estimated from deed records. Actual age requires skip tracing. Not verified.
+    </div>
+    <div class="sr-card-actions">
+      <button class="btn btn-senior btn-small" onclick='draftSeniorLetter(${idx})'>✉ Draft Letter</button>
+      <button class="btn btn-outline btn-small" onclick='saveSrLead(${idx})'>Save Lead</button>
+    </div>`;
+  return div;
+}
+
+function renderSrStats(props) {
+  if (!props.length) return;
+  const highPri = props.filter(p => p.senior_tier === 'High Priority').length;
+  const avgYears = Math.round(props.reduce((a, p) => a + (p.years_owned || 0), 0) / props.length);
+  const withVal = props.filter(p => p.estimated_current_value);
+  const avgVal = withVal.length ? withVal.reduce((a, p) => a + p.estimated_current_value, 0) / withVal.length : 0;
+  const freeClear = props.filter(p => p.has_mortgage === false).length;
+
+  $('sr-stat-count').textContent = props.length;
+  $('sr-stat-high').textContent = highPri;
+  $('sr-stat-years').textContent = avgYears + ' yrs';
+  $('sr-stat-value').textContent = avgVal ? '$' + Math.round(avgVal).toLocaleString() : '—';
+  $('sr-stat-fc').textContent = freeClear;
+  $('sr-stats-bar').style.display = 'flex';
+}
+
+function renderSrSourceBadge(data) {
+  const el = $('sr-source-badge');
+  const src = data.source || '';
+  let cls, icon, text;
+  if (src === 'monmouth_county_records') {
+    cls = 'real'; icon = '✅';
+    text = `Live Monmouth County tax records — ${data.count} senior-profile homeowner(s) found`;
+  } else {
+    cls = 'fallback'; icon = '📊';
+    text = `Realistic fallback data — ${data.count} record(s). Age estimates are illustrative.`;
+  }
+  el.className = `source-badge show ${cls}`;
+  el.innerHTML = `<span>${icon}</span><span>${text}</span>`;
+}
+
+async function saveSrLead(idx) {
+  const prop = allSeniors[idx];
+  if (!prop) return;
+  try {
+    const r = await fetch(`${API}/api/save-lead`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({property: prop}),
+    });
+    const data = await r.json();
+    toast(data.status === 'already_saved' ? 'Already saved' : `Lead saved! Total: ${data.total_leads}`,
+          data.status === 'already_saved' ? 'info' : 'success');
+    $('leads-count').textContent = data.total_leads;
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+async function draftSeniorLetter(idx) {
+  const prop = allSeniors[idx];
+  if (!prop) return;
+  $('senior-meta').textContent = `${prop.owner_name} · ${prop.address}`;
+  $('senior-body').textContent = 'Generating letter with Claude…';
+  $('senior-body').className = 'letter-box loading';
+  $('senior-modal').classList.add('open');
+
+  try {
+    const r = await fetch(`${API}/api/draft-senior-letter`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({property: prop}),
+    });
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    const data = await r.json();
+    currentSeniorLetter = data.letter;
+    $('senior-body').textContent = currentSeniorLetter;
+    $('senior-body').className = 'letter-box';
+  } catch(e) {
+    $('senior-body').textContent = 'Failed: ' + e.message;
+    $('senior-body').className = 'letter-box';
+    toast('Letter generation failed', 'error');
+  }
+}
+
+function closeSeniorModal() { $('senior-modal').classList.remove('open'); }
+async function copySeniorLetter() {
+  if (!currentSeniorLetter) return;
+  await navigator.clipboard.writeText(currentSeniorLetter);
+  toast('Letter copied!', 'success');
+}
+$('senior-modal').addEventListener('click', e => { if (e.target === $('senior-modal')) closeSeniorModal(); });
 
 // ── Foreclosure ───────────────────────────────────────────
 let allSales = [];

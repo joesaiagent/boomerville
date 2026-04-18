@@ -944,6 +944,174 @@ async def delete_lead(address: str):
     return {"status": "removed" if removed else "not_found", "total_leads": len(leads)}
 
 
+# ─── /api/seniors ────────────────────────────────────────────────────────────
+
+def _add_senior_profile(prop: dict) -> dict:
+    """Enrich a property record with estimated age range and senior score."""
+    years_owned = prop.get("years_owned", 0)
+    # Assume first-time buyer age 28–45; current age = that + years_owned
+    est_low = years_owned + 28
+    est_high = years_owned + 45
+
+    if years_owned >= 50:
+        senior_tier = "High Priority"
+        senior_note = f"Owned 50+ years — estimated age {est_low}–{est_high}, very likely 80+"
+    elif years_owned >= 40:
+        senior_tier = "Strong Match"
+        senior_note = f"Owned 40+ years — estimated age {est_low}–{est_high}, likely 70–85+"
+    else:
+        senior_tier = "Possible Match"
+        senior_note = f"Owned 30+ years — estimated age {est_low}–{est_high}"
+
+    prop = dict(prop)
+    prop["est_age_low"] = est_low
+    prop["est_age_high"] = est_high
+    prop["senior_tier"] = senior_tier
+    prop["senior_note"] = senior_note
+    if "Senior Profile" not in prop.get("tags", []):
+        prop.setdefault("tags", [])
+        prop["tags"] = list(prop["tags"]) + ["Senior Profile"]
+    return prop
+
+
+@app.get("/api/seniors")
+async def get_seniors(municipality: str = "all", min_years_owned: int = 40):
+    """
+    Returns senior-likely homeowners: long-term owners whose deed age implies 70–80+.
+    Wraps the real-search scraper and enriches each record with age estimation.
+    min_years_owned defaults to 40 (est. age 68–85+); use 45–50 to target 80+.
+    """
+    min_years_owned = max(30, min(min_years_owned, 60))
+    keys = list(MUNICIPALITIES.keys()) if municipality == "all" else [municipality]
+    keys = [k for k in keys if k in MUNICIPALITIES]
+    if not keys:
+        keys = list(MUNICIPALITIES.keys())
+
+    max_purchase_year = CURRENT_YEAR - min_years_owned
+    all_properties: list[dict] = []
+    sources: list[str] = []
+    notes: list[str] = []
+
+    for key in keys:
+        mun = MUNICIPALITIES[key]
+        cache_path = DATA_DIR / f"senior_cache_{key}_{min_years_owned}.json"
+
+        if cache_path.exists():
+            age_hours = (datetime.now().timestamp() - cache_path.stat().st_mtime) / 3600
+            if age_hours < 24:
+                cached = json.loads(cache_path.read_text())
+                all_properties.extend(cached.get("properties", []))
+                sources.append(cached.get("source", "cached"))
+                continue
+
+        source = "realistic_fallback"
+        properties: list[dict] = []
+
+        try:
+            scraped = await scrape_monmouth_records(
+                max_purchase_year=max_purchase_year,
+                municipality_key=key,
+            )
+            if len(scraped) >= 5:
+                properties = scraped
+                source = "monmouth_county_records"
+            else:
+                notes.append(f"{mun['name']}: {len(scraped)} records; using fallback.")
+        except Exception as e:
+            notes.append(f"{mun['name']}: scraper error ({e}); using fallback.")
+
+        if len(properties) < 5:
+            properties = generate_fallback_properties(key, min_years_owned, count=20)
+            source = "realistic_fallback"
+
+        properties = [p for p in properties if p.get("year_purchased", 9999) <= max_purchase_year]
+        properties = [_add_senior_profile(p) for p in properties]
+
+        cache_path.write_text(json.dumps({
+            "source": source, "municipality": key,
+            "min_years_owned": min_years_owned,
+            "count": len(properties), "properties": properties,
+        }, indent=2))
+        all_properties.extend(properties)
+        sources.append(source)
+
+    seen: set[str] = set()
+    deduped = []
+    for p in all_properties:
+        addr = p.get("address", "")
+        if addr not in seen:
+            seen.add(addr)
+            deduped.append(p)
+
+    dominant = "monmouth_county_records" if "monmouth_county_records" in sources else "realistic_fallback"
+    return {
+        "source": dominant,
+        "municipalities": keys,
+        "min_years_owned": min_years_owned,
+        "count": len(deduped),
+        "properties": deduped,
+        "notes": "; ".join(notes) if notes else None,
+    }
+
+
+# ─── /api/draft-senior-letter ────────────────────────────────────────────────
+
+@app.post("/api/draft-senior-letter")
+async def draft_senior_letter(body: dict):
+    """Generate a respectful outreach letter for a senior homeowner."""
+    prop = body.get("property", body)
+
+    owner_name = prop.get("owner_name", "Homeowner")
+    last_name = owner_name.split()[-1].rstrip(",") if owner_name else "Neighbor"
+    address = prop.get("address", "your property")
+    years_owned = prop.get("years_owned", 35)
+    est_low = prop.get("est_age_low", years_owned + 28)
+    est_high = prop.get("est_age_high", years_owned + 45)
+    equity = prop.get("estimated_equity", 0)
+    equity_str = f"${int(equity):,}" if equity else "significant"
+
+    cl = claude_client()
+
+    prompt = f"""Write a warm, respectful letter from Boomerville to a long-term homeowner who may be a senior
+considering their next chapter. They have owned their home for approximately {years_owned} years.
+
+Homeowner details:
+- Last name: {last_name}
+- Address: {address}
+- Years owned: ~{years_owned} years
+- Estimated age range: {est_low}–{est_high}
+
+About Boomerville: A small, local buyer group in Monmouth County, NJ. We buy homes directly,
+quickly, and privately — with no showings, no listings, no hassle. We help long-time homeowners
+unlock the equity they've built so they can move into the next chapter of life — whether that's
+assisted living, a retirement community, moving closer to family, or simply downsizing.
+
+Letter requirements:
+- Address them as "Mr./Ms. {last_name}" (formal but warm)
+- Tone: respectful, unhurried, dignified — NOT predatory, NOT urgent, NOT corporate
+- Acknowledge they have built something special over {years_owned} years
+- Mention that many neighbors like them are using home equity to fund retirement housing
+- Boomerville can offer a fast, private, no-listing sale — no open houses, no strangers walking through
+- Completely zero-obligation — just a friendly conversation if they're ever curious
+- Under 200 words
+- Sign off: "With respect, The Boomerville Team — Monmouth County, NJ"
+- Do NOT mention specific dollar amounts or assessed values
+
+Return only the letter text. No subject line, no commentary."""
+
+    msg = cl.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=600,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return {
+        "owner_name": owner_name,
+        "address": address,
+        "letter": msg.content[0].text.strip(),
+    }
+
+
 # ─── /api/foreclosures ───────────────────────────────────────────────────────
 
 @app.get("/api/foreclosures")
