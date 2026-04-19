@@ -798,15 +798,20 @@ async def real_search(municipality: str = "freehold", min_years_owned: int = 30)
                 max_purchase_year=max_purchase_year,
                 municipality_key=key,
             )
-            if len(scraped) >= 10:
+            if scraped:
                 properties = scraped
                 source = "monmouth_county_records"
+                if len(scraped) < 5:
+                    notes.append(
+                        f"{mun['name']}: only {len(scraped)} properties with "
+                        f"{min_years_owned}+ year ownership found — try lowering the filter."
+                    )
             else:
-                notes.append(f"{mun['name']}: scraper returned {len(scraped)} records; using fallback.")
+                notes.append(f"{mun['name']}: no records found in county database.")
         except Exception as e:
-            notes.append(f"{mun['name']}: scraper error ({e}); using fallback.")
+            notes.append(f"{mun['name']}: scraper error ({e}).")
 
-        if len(properties) < 10:
+        if not properties:
             properties = generate_fallback_properties(key, min_years_owned, count=25)
             source = "realistic_fallback"
 
@@ -1017,15 +1022,20 @@ async def get_seniors(municipality: str = "all", min_years_owned: int = 40):
                 max_purchase_year=max_purchase_year,
                 municipality_key=key,
             )
-            if len(scraped) >= 5:
+            if scraped:
                 properties = scraped
                 source = "monmouth_county_records"
+                if len(scraped) < 5:
+                    notes.append(
+                        f"{mun['name']}: only {len(scraped)} properties with "
+                        f"{min_years_owned}+ year ownership found — try lowering the filter."
+                    )
             else:
-                notes.append(f"{mun['name']}: {len(scraped)} records; using fallback.")
+                notes.append(f"{mun['name']}: no records found in county database.")
         except Exception as e:
-            notes.append(f"{mun['name']}: scraper error ({e}); using fallback.")
+            notes.append(f"{mun['name']}: scraper error ({e}).")
 
-        if len(properties) < 5:
+        if not properties:
             properties = generate_fallback_properties(key, min_years_owned, count=20)
             source = "realistic_fallback"
 
